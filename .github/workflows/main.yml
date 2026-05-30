@@ -3,41 +3,42 @@ name: build-windows
 on:
   workflow_dispatch:
   push:
-    branches: [ "main", "master" ]
-  pull_request:
-
-permissions:
-  contents: read
+    branches: [ main, master ]
 
 jobs:
   build:
-    name: Build x64 DLLs
     runs-on: windows-latest
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Configure CMake
-        shell: pwsh
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Configure C++ DLLs
         run: cmake -S . -B build -G "Visual Studio 17 2022" -A x64
 
-      - name: Build Release
-        shell: pwsh
+      - name: Build C++ DLLs
         run: cmake --build build --config Release -- /m
+
+      - name: Publish GUI
+        run: dotnet publish tools\CTFInstallerGui\CTFInstallerGui.csproj -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -o release\gui
 
       - name: Prepare artifact
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Path out -Force | Out-Null
-          Copy-Item build\Release\vcruntime140_1.dll out\vcruntime140_1.dll -Force
-          Copy-Item build\Release\ctf_patch_module.dll out\ctf_patch_module.dll -Force
-          Copy-Item src\proxy\vcruntime140_1.def out\vcruntime140_1.def -Force
-          Get-ChildItem out | Get-FileHash -Algorithm SHA256 | Out-File out\SHA256SUMS.txt
-          Compress-Archive -Path out\* -DestinationPath mc_ctf_clean_module_release.zip -Force
+          New-Item -ItemType Directory -Path release\payload -Force | Out-Null
+          Copy-Item build\Release\vcruntime140_1.dll release\payload\vcruntime140_1.dll -Force
+          Copy-Item build\Release\ctf_patch_module.dll release\payload\ctf_patch_module.dll -Force
+          Copy-Item README.md release\README.md -Force
+          Copy-Item tools\CTFInstallerGui\README.md release\GUI_README.md -Force
+          Get-ChildItem release -Recurse -File | Get-FileHash -Algorithm SHA256 | Out-File release\SHA256SUMS.txt
 
-      - name: Upload release zip
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: mc_ctf_clean_module_release
-          path: mc_ctf_clean_module_release.zip
+          name: mc_ctf_clean_gui_release
+          path: release
