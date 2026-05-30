@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Security.Cryptography;
+using System.Security.Principal;
 using System.Text;
 using System.Text.Json;
 
@@ -49,12 +50,13 @@ public sealed class MainForm : Form
     public MainForm()
     {
         Text = "Minecraft Bedrock CTF — Clean Installer";
-        MinimumSize = new Size(1040, 760);
-        Size = new Size(1120, 820);
+        MinimumSize = new Size(1120, 860);
+        Size = new Size(1180, 900);
         StartPosition = FormStartPosition.CenterScreen;
         BackColor = _bg;
         ForeColor = _text;
         Font = new Font("Segoe UI", 9.5f);
+        ApplyAppIcon();
 
         _installButton = MakeButton("Instalar / atualizar", Install, primary: true);
         _removeButton = MakeButton("Remover patch", Uninstall);
@@ -62,10 +64,10 @@ public sealed class MainForm : Form
 
         Controls.Add(BuildLayout());
 
-        _modsBox.Text = Path.Combine(
+        SetPathText(_modsBox, Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
             "Minecraft Bedrock",
-            "mods");
+            "mods"));
 
         Shown += (_, _) => AutoDetectEverything();
     }
@@ -98,21 +100,54 @@ public sealed class MainForm : Form
 
     private Control BuildHeader()
     {
-        var panel = new Panel
+        var grid = new TableLayoutPanel
         {
             Dock = DockStyle.Top,
             Height = 92,
+            ColumnCount = 3,
+            RowCount = 1,
             BackColor = _bg,
-            Padding = new Padding(0, 0, 0, 12)
+            Padding = new Padding(0, 0, 0, 14)
         };
+
+        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 58));
+        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 118));
+
+        var iconBox = new PictureBox
+        {
+            Size = new Size(46, 46),
+            SizeMode = PictureBoxSizeMode.CenterImage,
+            Margin = new Padding(0, 8, 12, 0)
+        };
+
+        try
+        {
+            iconBox.Image = Icon.ToBitmap();
+        }
+        catch
+        {
+            iconBox.Visible = false;
+        }
+
+        var textPanel = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            RowCount = 2,
+            ColumnCount = 1,
+            BackColor = _bg,
+            Margin = new Padding(0)
+        };
+        textPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 45));
+        textPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 32));
 
         var title = new Label
         {
             Text = "Clean CTF Installer",
             Font = new Font("Segoe UI Semibold", 22f, FontStyle.Bold),
             ForeColor = _text,
-            AutoSize = true,
-            Location = new Point(0, 0)
+            Dock = DockStyle.Fill,
+            TextAlign = ContentAlignment.BottomLeft
         };
 
         var subtitle = new Label
@@ -120,9 +155,12 @@ public sealed class MainForm : Form
             Text = "Instala o proxy e o módulo limpo para a build allowlisted do CTF. Payload detectado automaticamente.",
             Font = new Font("Segoe UI", 10.5f),
             ForeColor = _muted,
-            AutoSize = true,
-            Location = new Point(2, 46)
+            Dock = DockStyle.Fill,
+            TextAlign = ContentAlignment.TopLeft
         };
+
+        textPanel.Controls.Add(title, 0, 0);
+        textPanel.Controls.Add(subtitle, 0, 1);
 
         var badge = new Label
         {
@@ -131,18 +169,16 @@ public sealed class MainForm : Form
             Font = new Font("Segoe UI Semibold", 9f, FontStyle.Bold),
             ForeColor = Color.FromArgb(7, 89, 133),
             BackColor = Color.FromArgb(186, 230, 253),
-            Size = new Size(92, 28),
-            Anchor = AnchorStyles.Top | AnchorStyles.Right
+            Dock = DockStyle.Top,
+            Height = 30,
+            Margin = new Padding(0, 12, 0, 0)
         };
-        badge.Location = new Point(panel.Width - badge.Width, 10);
-        badge.Resize += (_, _) => badge.Location = new Point(panel.Width - badge.Width, 10);
-        panel.Resize += (_, _) => badge.Location = new Point(panel.Width - badge.Width, 10);
 
-        panel.Controls.Add(title);
-        panel.Controls.Add(subtitle);
-        panel.Controls.Add(badge);
+        grid.Controls.Add(iconBox, 0, 0);
+        grid.Controls.Add(textPanel, 1, 0);
+        grid.Controls.Add(badge, 2, 0);
 
-        return panel;
+        return grid;
     }
 
     private Control BuildStatusCards()
@@ -210,7 +246,7 @@ public sealed class MainForm : Form
             Dock = DockStyle.Top,
             ColumnCount = 2,
             RowCount = 1,
-            Height = 280,
+            Height = 390,
             BackColor = _bg,
             Padding = new Padding(0, 0, 0, 12)
         };
@@ -233,12 +269,15 @@ public sealed class MainForm : Form
             Dock = DockStyle.Fill,
             ColumnCount = 3,
             RowCount = 4,
-            Padding = new Padding(0, 4, 0, 0)
+            Padding = new Padding(0, 8, 0, 0)
         };
 
-        table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 126));
-        table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 120));
+        table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 116));
+
+        for (int i = 0; i < 4; i++)
+            table.RowStyles.Add(new RowStyle(SizeType.Absolute, 54));
 
         AddPathRow(table, "Package", _packageBox, null);
         AddPathRow(table, "Build CTF", _appFolderBox, null);
@@ -255,35 +294,59 @@ public sealed class MainForm : Form
 
     private Control BuildActionsCard()
     {
-        var (card, content) = MakeCard("Ações", "Feche o jogo antes de instalar ou remover.");
+        var (card, content) = MakeCard("Ações", "Feche o jogo antes de instalar, atualizar ou remover.");
 
-        var panel = new FlowLayoutPanel
+        var panel = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
-            FlowDirection = FlowDirection.TopDown,
-            WrapContents = false,
-            Padding = new Padding(0, 8, 0, 0)
+            ColumnCount = 1,
+            RowCount = 8,
+            Padding = new Padding(0, 8, 0, 0),
+            BackColor = _card
         };
 
-        var detect = MakeButton("Detectar tudo automaticamente", AutoDetectEverything, fullWidth: true);
-        var marker = MakeButton("Criar / atualizar marcador", () => CreateMarker(_enablePatchesBox.Checked), fullWidth: true);
-        _installButton.Width = 310;
-        _removeButton.Width = 310;
-        _launchButton.Width = 310;
+        panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
+        panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
+        panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 54));
+        panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
+        panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
+        panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
+        panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
+        panel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
-        panel.Controls.Add(detect);
-        panel.Controls.Add(marker);
-        panel.Controls.Add(_installButton);
-        panel.Controls.Add(_removeButton);
-        panel.Controls.Add(_launchButton);
-        panel.Controls.Add(MakeButton("Abrir pasta de logs", OpenLogsFolder, fullWidth: true));
+        void AddAction(Button button, int row)
+        {
+            button.Dock = DockStyle.Fill;
+            button.Margin = new Padding(0, 4, 0, 4);
+            button.AutoSize = false;
+            panel.Controls.Add(button, 0, row);
+        }
+
+        AddAction(MakeButton("Detectar tudo automaticamente", AutoDetectEverything), 0);
+        AddAction(MakeButton("Criar / atualizar marcador", () => CreateMarker(_enablePatchesBox.Checked)), 1);
+        AddAction(_installButton, 2);
+        AddAction(_removeButton, 3);
+        AddAction(_launchButton, 4);
+        AddAction(MakeButton("Abrir pasta de logs", OpenLogsFolder), 5);
 
         _enablePatchesBox.Text = "Ativar patch em memória (ENABLE_PATCHES=1)";
         _enablePatchesBox.Checked = true;
-        _enablePatchesBox.AutoSize = true;
+        _enablePatchesBox.AutoSize = false;
+        _enablePatchesBox.Dock = DockStyle.Fill;
         _enablePatchesBox.ForeColor = _text;
-        _enablePatchesBox.Padding = new Padding(4, 10, 0, 0);
-        panel.Controls.Add(_enablePatchesBox);
+        _enablePatchesBox.Padding = new Padding(4, 8, 0, 0);
+        panel.Controls.Add(_enablePatchesBox, 0, 6);
+
+        var note = new Label
+        {
+            Text = "Payload: automático. Use Manual somente se mover a pasta.",
+            ForeColor = _muted,
+            Dock = DockStyle.Top,
+            Height = 28,
+            TextAlign = ContentAlignment.MiddleLeft
+        };
+        panel.Controls.Add(note, 0, 7);
 
         content.Controls.Add(panel);
         return card;
@@ -367,15 +430,17 @@ public sealed class MainForm : Form
     {
         StyleTextBox(box);
         box.Dock = DockStyle.Fill;
-        box.Margin = new Padding(0, 6, 8, 6);
+        box.Margin = new Padding(0, 8, 8, 8);
+        box.Height = 30;
 
         panel.Controls.Add(new Label
         {
             Text = label,
             ForeColor = _muted,
-            AutoSize = true,
-            Anchor = AnchorStyles.Left,
-            Padding = new Padding(0, 10, 0, 0)
+            AutoSize = false,
+            Dock = DockStyle.Fill,
+            TextAlign = ContentAlignment.MiddleLeft,
+            Padding = new Padding(0, 0, 0, 0)
         });
 
         panel.Controls.Add(box);
@@ -388,7 +453,8 @@ public sealed class MainForm : Form
         {
             var btn = MakeButton(label.Equals("Payload", StringComparison.OrdinalIgnoreCase) ? "Manual" : "Selecionar", browse);
             btn.Dock = DockStyle.Fill;
-            btn.Margin = new Padding(0, 6, 0, 6);
+            btn.Margin = new Padding(0, 8, 0, 8);
+            btn.AutoSize = false;
             panel.Controls.Add(btn);
         }
     }
@@ -406,8 +472,8 @@ public sealed class MainForm : Form
         var btn = new Button
         {
             Text = text,
-            AutoSize = !fullWidth,
-            Width = fullWidth ? 310 : 0,
+            AutoSize = false,
+            Width = fullWidth ? 310 : 140,
             Height = 38,
             FlatStyle = FlatStyle.Flat,
             BackColor = primary ? _accent : _card2,
@@ -461,13 +527,13 @@ public sealed class MainForm : Form
         string? found = FindPayloadDirectory();
         if (found is not null)
         {
-            _payloadBox.Text = found;
+            SetPathText(_payloadBox, found);
             Log("Payload detectado automaticamente: " + found);
             return true;
         }
 
         string fallback = GuessLikelyPayloadFolder();
-        _payloadBox.Text = fallback;
+        SetPathText(_payloadBox, fallback);
         Log("Payload não encontrado automaticamente. Pasta provável: " + fallback);
 
         if (throwOnFail)
@@ -559,7 +625,7 @@ public sealed class MainForm : Form
 
         if (dlg.ShowDialog(this) == DialogResult.OK)
         {
-            _payloadBox.Text = dlg.SelectedPath;
+            SetPathText(_payloadBox, dlg.SelectedPath);
             if (IsPayloadDir(dlg.SelectedPath))
                 Log("Payload manual válido: " + dlg.SelectedPath);
             else
@@ -575,7 +641,7 @@ public sealed class MainForm : Form
         };
 
         if (dlg.ShowDialog(this) == DialogResult.OK)
-            _modsBox.Text = dlg.SelectedPath;
+            SetPathText(_modsBox, dlg.SelectedPath);
     }
 
     private void DetectCtfPackage(bool throwOnFail = true)
@@ -597,8 +663,8 @@ $pkg | ConvertTo-Json -Compress
         }
 
         using var doc = JsonDocument.Parse(output);
-        _packageBox.Text = doc.RootElement.GetProperty("PackageFullName").GetString() ?? "";
-        _appFolderBox.Text = doc.RootElement.GetProperty("InstallLocation").GetString() ?? "";
+        SetPathText(_packageBox, doc.RootElement.GetProperty("PackageFullName").GetString() ?? "");
+        SetPathText(_appFolderBox, doc.RootElement.GetProperty("InstallLocation").GetString() ?? "");
 
         if (!IsAllowedPackage(_packageBox.Text, _appFolderBox.Text))
             throw new InvalidOperationException("Pacote encontrado não bate com a allowlist do CTF.");
@@ -859,7 +925,7 @@ $p
         SetStatus(_payloadStatus, payloadOk ? "OK automático" : "não achado", payloadOk ? StatusKind.Ok : StatusKind.Warning);
         SetStatus(_markerStatus, markerOk ? "OK" : "pendente", markerOk ? StatusKind.Ok : StatusKind.Warning);
         SetStatus(_installStatus, installOk ? "instalado" : "não instalado", installOk ? StatusKind.Ok : StatusKind.Waiting);
-        SetStatus(_adminStatus, "elevado", StatusKind.Ok);
+        SetStatus(_adminStatus, IsRunningAsAdmin() ? "elevado" : "normal", IsRunningAsAdmin() ? StatusKind.Ok : StatusKind.Warning);
     }
 
     private void SetStatus(Label label, string text, StatusKind kind)
@@ -872,6 +938,46 @@ $p
             StatusKind.Error => _red,
             _ => _muted
         };
+    }
+
+
+    private void ApplyAppIcon()
+    {
+        try
+        {
+            Icon? extracted = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
+            if (extracted is not null)
+            {
+                Icon = (Icon)extracted.Clone();
+                extracted.Dispose();
+            }
+        }
+        catch
+        {
+            // Icon is cosmetic only.
+        }
+    }
+
+    private static bool IsRunningAsAdmin()
+    {
+        try
+        {
+            using var identity = WindowsIdentity.GetCurrent();
+            var principal = new WindowsPrincipal(identity);
+            return principal.IsInRole(WindowsBuiltInRole.Administrator);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static void SetPathText(TextBox box, string text)
+    {
+        box.Text = text;
+        box.SelectionStart = 0;
+        box.SelectionLength = 0;
+        box.ScrollToCaret();
     }
 
     private static string Sha256(string path)

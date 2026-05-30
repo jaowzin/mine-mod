@@ -221,3 +221,26 @@ mc_ctf_clean_gui_release/
    └─ ctf_patch_module.dll
 ```
 
+
+
+## GUI atualizada
+
+A versão `tools/CTFInstallerGui` agora inclui:
+
+- layout corrigido para não cortar os botões;
+- detecção automática de `release\payload`;
+- ícone próprio embutido em `assets\app.ico`;
+- painel de status mais claro para Build, Payload, Marcador, Instalação e Admin.
+
+O artifact esperado continua:
+
+```text
+release/
+├─ gui/
+│  └─ CTFInstallerGui.exe
+└─ payload/
+   ├─ vcruntime140_1.dll
+   └─ ctf_patch_module.dll
+```
+
+Abra `gui\CTFInstallerGui.exe`; o payload será encontrado automaticamente.
