@@ -35,7 +35,22 @@ jobs:
           Copy-Item build\Release\ctf_patch_module.dll release\payload\ctf_patch_module.dll -Force
           Copy-Item README.md release\README.md -Force
           Copy-Item tools\CTFInstallerGui\README.md release\GUI_README.md -Force
-          Get-ChildItem release -Recurse -File | Get-FileHash -Algorithm SHA256 | Out-File release\SHA256SUMS.txt
+          $hashPath = Join-Path (Resolve-Path release) "SHA256SUMS.txt"
+          $tmpHashPath = Join-Path (Resolve-Path release) "SHA256SUMS.tmp"
+          Remove-Item $hashPath, $tmpHashPath -Force -ErrorAction SilentlyContinue
+
+          $releaseRoot = (Resolve-Path release).Path
+          $lines = Get-ChildItem release -Recurse -File |
+            Where-Object { $_.FullName -ne $hashPath -and $_.FullName -ne $tmpHashPath } |
+            Sort-Object FullName |
+            ForEach-Object {
+              $hash = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash
+              $rel = $_.FullName.Substring($releaseRoot.Length + 1).Replace('\\', '/')
+              "$hash  $rel"
+            }
+
+          $lines | Set-Content -Path $tmpHashPath -Encoding utf8
+          Move-Item -LiteralPath $tmpHashPath -Destination $hashPath -Force
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
