@@ -17,8 +17,28 @@ public sealed class MainForm : Form
     private readonly TextBox _appFolderBox = new();
     private readonly TextBox _payloadBox = new();
     private readonly TextBox _modsBox = new();
-    private readonly TextBox _logBox = new();
+    private readonly RichTextBox _logBox = new();
     private readonly CheckBox _enablePatchesBox = new();
+
+    private readonly Label _buildStatus = new();
+    private readonly Label _payloadStatus = new();
+    private readonly Label _markerStatus = new();
+    private readonly Label _installStatus = new();
+    private readonly Label _adminStatus = new();
+
+    private readonly Button _installButton;
+    private readonly Button _removeButton;
+    private readonly Button _launchButton;
+
+    private readonly Color _bg = Color.FromArgb(15, 23, 42);
+    private readonly Color _card = Color.FromArgb(30, 41, 59);
+    private readonly Color _card2 = Color.FromArgb(51, 65, 85);
+    private readonly Color _text = Color.FromArgb(241, 245, 249);
+    private readonly Color _muted = Color.FromArgb(148, 163, 184);
+    private readonly Color _accent = Color.FromArgb(56, 189, 248);
+    private readonly Color _green = Color.FromArgb(34, 197, 94);
+    private readonly Color _yellow = Color.FromArgb(250, 204, 21);
+    private readonly Color _red = Color.FromArgb(248, 113, 113);
 
     private string MarkerDir => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -28,98 +48,336 @@ public sealed class MainForm : Form
 
     public MainForm()
     {
-        Text = "Minecraft Bedrock CTF Clean Installer";
-        Width = 980;
-        Height = 720;
+        Text = "Minecraft Bedrock CTF — Clean Installer";
+        MinimumSize = new Size(1040, 760);
+        Size = new Size(1120, 820);
         StartPosition = FormStartPosition.CenterScreen;
+        BackColor = _bg;
+        ForeColor = _text;
+        Font = new Font("Segoe UI", 9.5f);
 
+        _installButton = MakeButton("Instalar / atualizar", Install, primary: true);
+        _removeButton = MakeButton("Remover patch", Uninstall);
+        _launchButton = MakeButton("Iniciar jogo", LaunchCtfBuild, primary: true);
+
+        Controls.Add(BuildLayout());
+
+        _modsBox.Text = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+            "Minecraft Bedrock",
+            "mods");
+
+        Shown += (_, _) => AutoDetectEverything();
+    }
+
+    private Control BuildLayout()
+    {
         var root = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
-            RowCount = 6,
-            Padding = new Padding(12)
+            RowCount = 5,
+            Padding = new Padding(18),
+            BackColor = _bg
         };
 
-        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
-        var title = new Label
-        {
-            Text = "Instalador/Launcher limpo para o CTF autorizado",
-            Font = new Font(Font.FontFamily, 14, FontStyle.Bold),
-            AutoSize = true
-        };
-        root.Controls.Add(title);
+        root.Controls.Add(BuildHeader(), 0, 0);
+        root.Controls.Add(BuildStatusCards(), 0, 1);
+        root.Controls.Add(BuildMainCards(), 0, 2);
+        root.Controls.Add(BuildLogCard(), 0, 3);
+        root.Controls.Add(BuildFooter(), 0, 4);
 
-        var note = new Label
-        {
-            Text = "Não é injector genérico. Ele só prepara a build allowlisted do CTF, copia o proxy/módulo, cria marcador local e deixa o patch em memória para o jogo carregar ao iniciar.",
-            AutoSize = true,
-            MaximumSize = new Size(920, 0)
-        };
-        root.Controls.Add(note);
-
-        root.Controls.Add(BuildPathsPanel());
-        root.Controls.Add(BuildButtonsPanel());
-
-        _logBox.Multiline = true;
-        _logBox.ScrollBars = ScrollBars.Both;
-        _logBox.ReadOnly = true;
-        _logBox.WordWrap = false;
-        _logBox.Font = new Font("Consolas", 9);
-        root.Controls.Add(_logBox);
-
-        var footer = new Label
-        {
-            Text = "Escopo: somente CTF-ID " + CtfId + ". Feche o jogo antes de instalar/remover.",
-            AutoSize = true
-        };
-        root.Controls.Add(footer);
-
-        Controls.Add(root);
-
-        _payloadBox.Text = AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar);
-        _modsBox.Text = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "Minecraft Bedrock",
-            "mods");
-
-        Shown += (_, _) => DetectCtfPackage();
+        return root;
     }
 
-    private Control BuildPathsPanel()
+    private Control BuildHeader()
     {
-        var panel = new TableLayoutPanel
+        var panel = new Panel
         {
-            ColumnCount = 3,
-            AutoSize = true,
             Dock = DockStyle.Top,
-            Padding = new Padding(0, 12, 0, 8)
+            Height = 92,
+            BackColor = _bg,
+            Padding = new Padding(0, 0, 0, 12)
         };
-        panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 160));
-        panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 120));
 
-        AddPathRow(panel, "Package:", _packageBox, null);
-        AddPathRow(panel, "Pasta da build:", _appFolderBox, null);
-        AddPathRow(panel, "Payload/build:", _payloadBox, BrowsePayload);
-        AddPathRow(panel, "Pasta mods:", _modsBox, BrowseMods);
+        var title = new Label
+        {
+            Text = "Clean CTF Installer",
+            Font = new Font("Segoe UI Semibold", 22f, FontStyle.Bold),
+            ForeColor = _text,
+            AutoSize = true,
+            Location = new Point(0, 0)
+        };
 
-        _packageBox.ReadOnly = true;
-        _appFolderBox.ReadOnly = true;
+        var subtitle = new Label
+        {
+            Text = "Instala o proxy e o módulo limpo para a build allowlisted do CTF. Payload detectado automaticamente.",
+            Font = new Font("Segoe UI", 10.5f),
+            ForeColor = _muted,
+            AutoSize = true,
+            Location = new Point(2, 46)
+        };
+
+        var badge = new Label
+        {
+            Text = "CTF ONLY",
+            TextAlign = ContentAlignment.MiddleCenter,
+            Font = new Font("Segoe UI Semibold", 9f, FontStyle.Bold),
+            ForeColor = Color.FromArgb(7, 89, 133),
+            BackColor = Color.FromArgb(186, 230, 253),
+            Size = new Size(92, 28),
+            Anchor = AnchorStyles.Top | AnchorStyles.Right
+        };
+        badge.Location = new Point(panel.Width - badge.Width, 10);
+        badge.Resize += (_, _) => badge.Location = new Point(panel.Width - badge.Width, 10);
+        panel.Resize += (_, _) => badge.Location = new Point(panel.Width - badge.Width, 10);
+
+        panel.Controls.Add(title);
+        panel.Controls.Add(subtitle);
+        panel.Controls.Add(badge);
+
         return panel;
     }
 
-    private static void AddPathRow(TableLayoutPanel panel, string label, TextBox box, Action? browse)
+    private Control BuildStatusCards()
     {
-        box.Dock = DockStyle.Fill;
+        var grid = new TableLayoutPanel
+        {
+            Dock = DockStyle.Top,
+            ColumnCount = 5,
+            RowCount = 1,
+            Height = 92,
+            BackColor = _bg,
+            Padding = new Padding(0, 0, 0, 12)
+        };
 
-        panel.Controls.Add(new Label { Text = label, AutoSize = true, Anchor = AnchorStyles.Left, Padding = new Padding(0, 6, 0, 0) });
+        for (int i = 0; i < 5; i++)
+            grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 20));
+
+        grid.Controls.Add(StatusTile("Build", _buildStatus), 0, 0);
+        grid.Controls.Add(StatusTile("Payload", _payloadStatus), 1, 0);
+        grid.Controls.Add(StatusTile("Marcador", _markerStatus), 2, 0);
+        grid.Controls.Add(StatusTile("Instalação", _installStatus), 3, 0);
+        grid.Controls.Add(StatusTile("Admin", _adminStatus), 4, 0);
+
+        SetStatus(_buildStatus, "aguardando", StatusKind.Waiting);
+        SetStatus(_payloadStatus, "aguardando", StatusKind.Waiting);
+        SetStatus(_markerStatus, "aguardando", StatusKind.Waiting);
+        SetStatus(_installStatus, "aguardando", StatusKind.Waiting);
+        SetStatus(_adminStatus, "verificando", StatusKind.Waiting);
+
+        return grid;
+    }
+
+    private Control StatusTile(string title, Label value)
+    {
+        var panel = new Panel
+        {
+            BackColor = _card,
+            Dock = DockStyle.Fill,
+            Margin = new Padding(0, 0, 10, 0),
+            Padding = new Padding(14, 10, 14, 10)
+        };
+
+        var titleLabel = new Label
+        {
+            Text = title.ToUpperInvariant(),
+            ForeColor = _muted,
+            Font = new Font("Segoe UI Semibold", 8.5f, FontStyle.Bold),
+            AutoSize = true,
+            Location = new Point(14, 10)
+        };
+
+        value.Font = new Font("Segoe UI Semibold", 12f, FontStyle.Bold);
+        value.AutoSize = true;
+        value.Location = new Point(14, 38);
+
+        panel.Controls.Add(titleLabel);
+        panel.Controls.Add(value);
+        return panel;
+    }
+
+    private Control BuildMainCards()
+    {
+        var grid = new TableLayoutPanel
+        {
+            Dock = DockStyle.Top,
+            ColumnCount = 2,
+            RowCount = 1,
+            Height = 280,
+            BackColor = _bg,
+            Padding = new Padding(0, 0, 0, 12)
+        };
+
+        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 62));
+        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 38));
+
+        grid.Controls.Add(BuildPathsCard(), 0, 0);
+        grid.Controls.Add(BuildActionsCard(), 1, 0);
+
+        return grid;
+    }
+
+    private Control BuildPathsCard()
+    {
+        var (card, content) = MakeCard("Caminhos detectados", "O payload é achado sozinho ao lado da GUI: release\\payload.");
+
+        var table = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 3,
+            RowCount = 4,
+            Padding = new Padding(0, 4, 0, 0)
+        };
+
+        table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 126));
+        table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 120));
+
+        AddPathRow(table, "Package", _packageBox, null);
+        AddPathRow(table, "Build CTF", _appFolderBox, null);
+        AddPathRow(table, "Payload", _payloadBox, ChoosePayloadManually);
+        AddPathRow(table, "Mods", _modsBox, BrowseMods);
+
+        _packageBox.ReadOnly = true;
+        _appFolderBox.ReadOnly = true;
+        _payloadBox.ReadOnly = true;
+
+        content.Controls.Add(table);
+        return card;
+    }
+
+    private Control BuildActionsCard()
+    {
+        var (card, content) = MakeCard("Ações", "Feche o jogo antes de instalar ou remover.");
+
+        var panel = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            FlowDirection = FlowDirection.TopDown,
+            WrapContents = false,
+            Padding = new Padding(0, 8, 0, 0)
+        };
+
+        var detect = MakeButton("Detectar tudo automaticamente", AutoDetectEverything, fullWidth: true);
+        var marker = MakeButton("Criar / atualizar marcador", () => CreateMarker(_enablePatchesBox.Checked), fullWidth: true);
+        _installButton.Width = 310;
+        _removeButton.Width = 310;
+        _launchButton.Width = 310;
+
+        panel.Controls.Add(detect);
+        panel.Controls.Add(marker);
+        panel.Controls.Add(_installButton);
+        panel.Controls.Add(_removeButton);
+        panel.Controls.Add(_launchButton);
+        panel.Controls.Add(MakeButton("Abrir pasta de logs", OpenLogsFolder, fullWidth: true));
+
+        _enablePatchesBox.Text = "Ativar patch em memória (ENABLE_PATCHES=1)";
+        _enablePatchesBox.Checked = true;
+        _enablePatchesBox.AutoSize = true;
+        _enablePatchesBox.ForeColor = _text;
+        _enablePatchesBox.Padding = new Padding(4, 10, 0, 0);
+        panel.Controls.Add(_enablePatchesBox);
+
+        content.Controls.Add(panel);
+        return card;
+    }
+
+    private Control BuildLogCard()
+    {
+        var (card, content) = MakeCard("Log", "Mensagens locais do instalador. O módulo escreve logs em %LOCALAPPDATA%\\MinecraftBedrockCTF.");
+
+        _logBox.Dock = DockStyle.Fill;
+        _logBox.ReadOnly = true;
+        _logBox.WordWrap = false;
+        _logBox.ScrollBars = RichTextBoxScrollBars.Both;
+        _logBox.Font = new Font("Consolas", 9.5f);
+        _logBox.BackColor = Color.FromArgb(2, 6, 23);
+        _logBox.ForeColor = Color.FromArgb(203, 213, 225);
+        _logBox.BorderStyle = BorderStyle.None;
+        _logBox.Margin = new Padding(0, 8, 0, 0);
+
+        content.Controls.Add(_logBox);
+        return card;
+    }
+
+    private Control BuildFooter()
+    {
+        var label = new Label
+        {
+            Text = "Escopo: somente " + CtfId + ". Não modifica xgameruntime.dll no disco; o patch é em memória dentro da build autorizada.",
+            Dock = DockStyle.Top,
+            Height = 28,
+            ForeColor = _muted,
+            TextAlign = ContentAlignment.MiddleLeft
+        };
+        return label;
+    }
+
+    private (Panel Card, Panel Content) MakeCard(string title, string subtitle)
+    {
+        var card = new Panel
+        {
+            Dock = DockStyle.Fill,
+            BackColor = _card,
+            Padding = new Padding(16),
+            Margin = new Padding(0, 0, 12, 0)
+        };
+
+        var titleLabel = new Label
+        {
+            Text = title,
+            ForeColor = _text,
+            Font = new Font("Segoe UI Semibold", 13f, FontStyle.Bold),
+            AutoSize = true,
+            Location = new Point(16, 12)
+        };
+
+        var subtitleLabel = new Label
+        {
+            Text = subtitle,
+            ForeColor = _muted,
+            Font = new Font("Segoe UI", 9.2f),
+            AutoSize = true,
+            Location = new Point(17, 42),
+            MaximumSize = new Size(720, 0)
+        };
+
+        var content = new Panel
+        {
+            Dock = DockStyle.Fill,
+            Padding = new Padding(0, 62, 0, 0),
+            BackColor = _card
+        };
+
+        card.Controls.Add(content);
+        card.Controls.Add(titleLabel);
+        card.Controls.Add(subtitleLabel);
+
+        return (card, content);
+    }
+
+    private void AddPathRow(TableLayoutPanel panel, string label, TextBox box, Action? browse)
+    {
+        StyleTextBox(box);
+        box.Dock = DockStyle.Fill;
+        box.Margin = new Padding(0, 6, 8, 6);
+
+        panel.Controls.Add(new Label
+        {
+            Text = label,
+            ForeColor = _muted,
+            AutoSize = true,
+            Anchor = AnchorStyles.Left,
+            Padding = new Padding(0, 10, 0, 0)
+        });
+
         panel.Controls.Add(box);
 
         if (browse is null)
@@ -128,75 +386,199 @@ public sealed class MainForm : Form
         }
         else
         {
-            var btn = new Button { Text = "Selecionar", Dock = DockStyle.Fill };
-            btn.Click += (_, _) => browse();
+            var btn = MakeButton(label.Equals("Payload", StringComparison.OrdinalIgnoreCase) ? "Manual" : "Selecionar", browse);
+            btn.Dock = DockStyle.Fill;
+            btn.Margin = new Padding(0, 6, 0, 6);
             panel.Controls.Add(btn);
         }
     }
 
-    private Control BuildButtonsPanel()
+    private void StyleTextBox(TextBox box)
     {
-        var panel = new FlowLayoutPanel
-        {
-            Dock = DockStyle.Top,
-            AutoSize = true,
-            Padding = new Padding(0, 4, 0, 8)
-        };
-
-        panel.Controls.Add(MakeButton("Detectar build", DetectCtfPackage));
-        panel.Controls.Add(MakeButton("Criar marcador", () => CreateMarker(_enablePatchesBox.Checked)));
-        panel.Controls.Add(MakeButton("Instalar/atualizar", Install));
-        panel.Controls.Add(MakeButton("Remover", Uninstall));
-        panel.Controls.Add(MakeButton("Abrir logs", OpenLogsFolder));
-        panel.Controls.Add(MakeButton("Iniciar jogo", LaunchCtfBuild));
-
-        _enablePatchesBox.Text = "ENABLE_PATCHES=1";
-        _enablePatchesBox.Checked = true;
-        _enablePatchesBox.AutoSize = true;
-        _enablePatchesBox.Padding = new Padding(12, 8, 0, 0);
-        panel.Controls.Add(_enablePatchesBox);
-
-        return panel;
+        box.BackColor = _card2;
+        box.ForeColor = _text;
+        box.BorderStyle = BorderStyle.FixedSingle;
+        box.Font = new Font("Segoe UI", 9.5f);
     }
 
-    private static Button MakeButton(string text, Action action)
+    private Button MakeButton(string text, Action action, bool primary = false, bool fullWidth = false)
     {
         var btn = new Button
         {
             Text = text,
-            AutoSize = true,
-            Padding = new Padding(10, 4, 10, 4),
-            Margin = new Padding(4)
+            AutoSize = !fullWidth,
+            Width = fullWidth ? 310 : 0,
+            Height = 38,
+            FlatStyle = FlatStyle.Flat,
+            BackColor = primary ? _accent : _card2,
+            ForeColor = primary ? Color.FromArgb(8, 47, 73) : _text,
+            Font = new Font("Segoe UI Semibold", 9.3f, FontStyle.Bold),
+            Padding = new Padding(12, 5, 12, 5),
+            Margin = new Padding(4, 5, 4, 5),
+            Cursor = Cursors.Hand
         };
+
+        btn.FlatAppearance.BorderColor = primary ? _accent : Color.FromArgb(71, 85, 105);
+        btn.FlatAppearance.MouseOverBackColor = primary ? Color.FromArgb(125, 211, 252) : Color.FromArgb(71, 85, 105);
+
         btn.Click += (_, _) =>
         {
-            try { action(); }
-            catch (Exception ex) { MessageBox.Show(ex.Message, "Erro", MessageBoxButtons.OK, MessageBoxIcon.Error); }
+            try
+            {
+                UseWaitCursor = true;
+                action();
+                RefreshStatuses();
+            }
+            catch (Exception ex)
+            {
+                Log("ERRO: " + ex.Message);
+                RefreshStatuses();
+                MessageBox.Show(ex.Message, "Erro", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+            finally
+            {
+                UseWaitCursor = false;
+            }
         };
+
         return btn;
     }
 
-    private void BrowsePayload()
+    private void AutoDetectEverything()
+    {
+        Log("Rodando detecção automática...");
+
+        DetectPayload(throwOnFail: false);
+
+        try { DetectCtfPackage(throwOnFail: false); }
+        catch (Exception ex) { Log("Build ainda não detectada: " + ex.Message); }
+
+        RefreshStatuses();
+    }
+
+    private bool DetectPayload(bool throwOnFail)
+    {
+        string? found = FindPayloadDirectory();
+        if (found is not null)
+        {
+            _payloadBox.Text = found;
+            Log("Payload detectado automaticamente: " + found);
+            return true;
+        }
+
+        string fallback = GuessLikelyPayloadFolder();
+        _payloadBox.Text = fallback;
+        Log("Payload não encontrado automaticamente. Pasta provável: " + fallback);
+
+        if (throwOnFail)
+            throw new FileNotFoundException("Não achei automaticamente vcruntime140_1.dll e ctf_patch_module.dll. Baixe o artifact compilado e mantenha a pasta 'payload' ao lado da pasta 'gui'.");
+
+        return false;
+    }
+
+    private string? FindPayloadDirectory()
+    {
+        var dirs = new List<string>();
+
+        void AddDir(string? d)
+        {
+            if (!string.IsNullOrWhiteSpace(d) &&
+                Directory.Exists(d) &&
+                !dirs.Contains(d, StringComparer.OrdinalIgnoreCase))
+            {
+                dirs.Add(d);
+            }
+        }
+
+        string baseDir = AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar);
+        string current = Directory.GetCurrentDirectory();
+        string? parent = Directory.GetParent(baseDir)?.FullName;
+        string? grandParent = parent is null ? null : Directory.GetParent(parent)?.FullName;
+
+        AddDir(Environment.GetEnvironmentVariable("CTF_PAYLOAD_DIR"));
+        AddDir(Path.Combine(baseDir, "payload"));
+        AddDir(parent is null ? null : Path.Combine(parent, "payload"));
+        AddDir(grandParent is null ? null : Path.Combine(grandParent, "payload"));
+        AddDir(Path.Combine(current, "payload"));
+        AddDir(baseDir);
+        AddDir(parent);
+        AddDir(current);
+
+        string? cursor = baseDir;
+        for (int i = 0; i < 6 && cursor is not null; i++)
+        {
+            AddDir(Path.Combine(cursor, "payload"));
+            AddDir(cursor);
+            cursor = Directory.GetParent(cursor)?.FullName;
+        }
+
+        foreach (string d in dirs)
+        {
+            if (IsPayloadDir(d))
+                return d;
+        }
+
+        foreach (string d in dirs)
+        {
+            try
+            {
+                string? found = Directory.EnumerateDirectories(d, "*", SearchOption.AllDirectories)
+                    .Take(250)
+                    .FirstOrDefault(IsPayloadDir);
+                if (found is not null)
+                    return found;
+            }
+            catch
+            {
+                // Ignore inaccessible folders.
+            }
+        }
+
+        return null;
+    }
+
+    private static bool IsPayloadDir(string dir)
+    {
+        return File.Exists(Path.Combine(dir, "vcruntime140_1.dll")) &&
+               File.Exists(Path.Combine(dir, "ctf_patch_module.dll"));
+    }
+
+    private string GuessLikelyPayloadFolder()
+    {
+        string baseDir = AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar);
+        string? parent = Directory.GetParent(baseDir)?.FullName;
+        return parent is null ? Path.Combine(baseDir, "payload") : Path.Combine(parent, "payload");
+    }
+
+    private void ChoosePayloadManually()
     {
         using var dlg = new FolderBrowserDialog
         {
-            Description = "Selecione a pasta que contém vcruntime140_1.dll e ctf_patch_module.dll"
+            Description = "Fallback manual: selecione a pasta que contém vcruntime140_1.dll e ctf_patch_module.dll"
         };
+
         if (dlg.ShowDialog(this) == DialogResult.OK)
+        {
             _payloadBox.Text = dlg.SelectedPath;
+            if (IsPayloadDir(dlg.SelectedPath))
+                Log("Payload manual válido: " + dlg.SelectedPath);
+            else
+                Log("Aviso: a pasta escolhida não contém as duas DLLs esperadas.");
+        }
     }
 
     private void BrowseMods()
     {
         using var dlg = new FolderBrowserDialog
         {
-            Description = "Selecione a pasta mods"
+            Description = "Selecione a pasta mods do ambiente CTF"
         };
+
         if (dlg.ShowDialog(this) == DialogResult.OK)
             _modsBox.Text = dlg.SelectedPath;
     }
 
-    private void DetectCtfPackage()
+    private void DetectCtfPackage(bool throwOnFail = true)
     {
         Log("Detectando pacote CTF allowlisted...");
         string script = @"
@@ -208,7 +590,11 @@ $pkg | ConvertTo-Json -Compress
 ";
         string output = RunPowerShell(script);
         if (string.IsNullOrWhiteSpace(output))
-            throw new InvalidOperationException("Build CTF não encontrada via Get-AppxPackage.");
+        {
+            if (throwOnFail)
+                throw new InvalidOperationException("Build CTF não encontrada via Get-AppxPackage.");
+            return;
+        }
 
         using var doc = JsonDocument.Parse(output);
         _packageBox.Text = doc.RootElement.GetProperty("PackageFullName").GetString() ?? "";
@@ -217,19 +603,21 @@ $pkg | ConvertTo-Json -Compress
         if (!IsAllowedPackage(_packageBox.Text, _appFolderBox.Text))
             throw new InvalidOperationException("Pacote encontrado não bate com a allowlist do CTF.");
 
-        Log("Pacote detectado: " + _packageBox.Text);
-        Log("Pasta: " + _appFolderBox.Text);
+        Log("Build detectada: " + _packageBox.Text);
+        Log("Pasta da build: " + _appFolderBox.Text);
     }
 
     private void CreateMarker(bool enable)
     {
         Directory.CreateDirectory(MarkerDir);
+
         string text =
             "CTF-ID=" + CtfId + "\r\n" +
             "CTF-SHA256=" + CtfSha + "\r\n" +
             "ENABLE_PATCHES=" + (enable ? "1" : "0") + "\r\n";
+
         File.WriteAllText(MarkerPath, text, Encoding.ASCII);
-        Log("Marcador criado: " + MarkerPath);
+        Log("Marcador criado/atualizado: " + MarkerPath);
         Log("ENABLE_PATCHES=" + (enable ? "1" : "0"));
     }
 
@@ -238,6 +626,9 @@ $pkg | ConvertTo-Json -Compress
         EnsureGameClosed();
         EnsureDetected();
 
+        if (!IsPayloadDir(_payloadBox.Text.Trim()))
+            DetectPayload(throwOnFail: true);
+
         string appFolder = _appFolderBox.Text.Trim();
         string payload = _payloadBox.Text.Trim();
         string mods = _modsBox.Text.Trim();
@@ -245,23 +636,20 @@ $pkg | ConvertTo-Json -Compress
         string proxySrc = Path.Combine(payload, "vcruntime140_1.dll");
         string moduleSrc = Path.Combine(payload, "ctf_patch_module.dll");
 
-        // Support GitHub artifact layout: payload can also be parent folder containing build\Release.
         if (!File.Exists(proxySrc))
-            proxySrc = Directory.EnumerateFiles(payload, "vcruntime140_1.dll", SearchOption.AllDirectories).FirstOrDefault() ?? proxySrc;
+            throw new FileNotFoundException("Não achei vcruntime140_1.dll no payload detectado.", proxySrc);
         if (!File.Exists(moduleSrc))
-            moduleSrc = Directory.EnumerateFiles(payload, "ctf_patch_module.dll", SearchOption.AllDirectories).FirstOrDefault() ?? moduleSrc;
+            throw new FileNotFoundException("Não achei ctf_patch_module.dll no payload detectado.", moduleSrc);
 
-        if (!File.Exists(proxySrc))
-            throw new FileNotFoundException("Não achei vcruntime140_1.dll no payload/build.", proxySrc);
-        if (!File.Exists(moduleSrc))
-            throw new FileNotFoundException("Não achei ctf_patch_module.dll no payload/build.", moduleSrc);
+        Log("Payload confirmado:");
+        Log("  proxy : " + proxySrc);
+        Log("  módulo: " + moduleSrc);
 
         string runtimeSrc = FindUwpDesktopRuntime();
         if (!File.Exists(runtimeSrc))
             throw new FileNotFoundException("Não achei o vcruntime140_1.dll UWPDesktop x64 limpo.", runtimeSrc);
 
         CreateMarker(_enablePatchesBox.Checked);
-
         Directory.CreateDirectory(mods);
 
         string proxyDst = Path.Combine(appFolder, "vcruntime140_1.dll");
@@ -278,11 +666,11 @@ $pkg | ConvertTo-Json -Compress
 
         WriteInstallState(proxyDst, runtimeDst, moduleDst);
 
-        Log("Instalado:");
+        Log("Instalação concluída.");
         Log("  proxy  -> " + proxyDst);
         Log("  runtime-> " + runtimeDst);
         Log("  módulo -> " + moduleDst);
-        Log("Agora inicie a build CTF. O jogo deve estar fechado durante a instalação, mas aberto depois para o patch em memória acontecer.");
+        Log("Agora abra a build CTF. O patch acontece em memória quando o jogo carregar.");
     }
 
     private void Uninstall()
@@ -307,7 +695,7 @@ $pkg | ConvertTo-Json -Compress
     private void LaunchCtfBuild()
     {
         EnsureDetected();
-        Log("Tentando iniciar via shell:AppsFolder...");
+        Log("Iniciando via shell:AppsFolder...");
         Process.Start(new ProcessStartInfo
         {
             FileName = "explorer.exe",
@@ -351,10 +739,13 @@ $pkg | ConvertTo-Json -Compress
                 {
                     return p.ProcessName.Contains("Minecraft", StringComparison.OrdinalIgnoreCase);
                 }
-                catch { return false; }
+                catch
+                {
+                    return false;
+                }
             })
             .Select(p => p.ProcessName)
-            .Distinct()
+            .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
         if (procs.Length > 0)
@@ -408,7 +799,9 @@ $p
 
     private void BackupIfExists(string path)
     {
-        if (!File.Exists(path)) return;
+        if (!File.Exists(path))
+            return;
+
         string backup = path + ".ctfbackup." + DateTime.Now.ToString("yyyyMMdd_HHmmss");
         File.Copy(path, backup, overwrite: false);
         Log("Backup: " + backup);
@@ -419,7 +812,9 @@ $p
         var state = new List<InstallFileState>();
         foreach (string path in paths)
         {
-            if (!File.Exists(path)) continue;
+            if (!File.Exists(path))
+                continue;
+
             state.Add(new InstallFileState(path, Sha256(path)));
         }
 
@@ -438,7 +833,6 @@ $p
             return;
         }
 
-        // Safety guard: delete only known CTF filenames, not arbitrary system DLLs elsewhere.
         string file = Path.GetFileName(path);
         if (!file.Equals("vcruntime140_1.dll", StringComparison.OrdinalIgnoreCase) &&
             !file.Equals("vcruntime140_2.dll", StringComparison.OrdinalIgnoreCase) &&
@@ -451,6 +845,35 @@ $p
         Log("Removido: " + path);
     }
 
+    private void RefreshStatuses()
+    {
+        bool buildOk = IsAllowedPackage(_packageBox.Text.Trim(), _appFolderBox.Text.Trim());
+        bool payloadOk = IsPayloadDir(_payloadBox.Text.Trim());
+        bool markerOk = File.Exists(MarkerPath);
+        bool installOk = buildOk &&
+                         File.Exists(Path.Combine(_appFolderBox.Text.Trim(), "vcruntime140_1.dll")) &&
+                         File.Exists(Path.Combine(_appFolderBox.Text.Trim(), "vcruntime140_2.dll")) &&
+                         File.Exists(Path.Combine(_modsBox.Text.Trim(), "ctf_patch_module.dll"));
+
+        SetStatus(_buildStatus, buildOk ? "OK" : "não detectada", buildOk ? StatusKind.Ok : StatusKind.Warning);
+        SetStatus(_payloadStatus, payloadOk ? "OK automático" : "não achado", payloadOk ? StatusKind.Ok : StatusKind.Warning);
+        SetStatus(_markerStatus, markerOk ? "OK" : "pendente", markerOk ? StatusKind.Ok : StatusKind.Warning);
+        SetStatus(_installStatus, installOk ? "instalado" : "não instalado", installOk ? StatusKind.Ok : StatusKind.Waiting);
+        SetStatus(_adminStatus, "elevado", StatusKind.Ok);
+    }
+
+    private void SetStatus(Label label, string text, StatusKind kind)
+    {
+        label.Text = text;
+        label.ForeColor = kind switch
+        {
+            StatusKind.Ok => _green,
+            StatusKind.Warning => _yellow,
+            StatusKind.Error => _red,
+            _ => _muted
+        };
+    }
+
     private static string Sha256(string path)
     {
         using var sha = SHA256.Create();
@@ -461,6 +884,16 @@ $p
     private void Log(string msg)
     {
         _logBox.AppendText("[" + DateTime.Now.ToString("HH:mm:ss") + "] " + msg + Environment.NewLine);
+        _logBox.SelectionStart = _logBox.TextLength;
+        _logBox.ScrollToCaret();
+    }
+
+    private enum StatusKind
+    {
+        Waiting,
+        Ok,
+        Warning,
+        Error
     }
 
     private sealed record InstallFileState(string Path, string Sha256);

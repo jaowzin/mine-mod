@@ -204,9 +204,20 @@ dotnet publish tools\CTFInstallerGui\CTFInstallerGui.csproj -c Release -r win-x6
 Uso:
 
 1. feche a build CTF;
-2. abra `CTFInstallerGui.exe` como administrador;
-3. clique em `Detectar build`;
-4. selecione a pasta `payload`/build contendo `vcruntime140_1.dll` e `ctf_patch_module.dll`;
-5. clique em `Instalar/atualizar`;
+2. baixe o artifact do GitHub Actions mantendo `gui/` e `payload/` lado a lado;
+3. abra `gui\CTFInstallerGui.exe` como administrador;
+4. a GUI detecta a build e o payload automaticamente;
+5. clique em `Instalar / atualizar`;
 6. abra a build CTF.
+
+Estrutura esperada do artifact:
+
+```text
+mc_ctf_clean_gui_release/
+├─ gui/
+│  └─ CTFInstallerGui.exe
+└─ payload/
+   ├─ vcruntime140_1.dll
+   └─ ctf_patch_module.dll
+```
 
