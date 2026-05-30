@@ -1,0 +1,15 @@
+LIBRARY "vcruntime140_1.dll"
+
+; Proxy for the UWPDesktop x64 VCRUNTIME140_1.dll used by the CTF build.
+; Put the clean original runtime next to this proxy as vcruntime140_2.dll.
+;
+; Original exports observed for:
+; Microsoft.VCLibs.140.00.UWPDesktop_14.0.33728.0_x64__8wekyb3d8bbwe\vcruntime140_1.dll
+;
+; This file only forwards the original runtime exports. The proxy DllMain loads
+; ctf_patch_module.dll after basic CTF guard checks.
+
+EXPORTS
+    __CxxFrameHandler4 = vcruntime140_2.__CxxFrameHandler4 @1
+    __NLG_Dispatch2   = vcruntime140_2.__NLG_Dispatch2   @2
+    __NLG_Return2     = vcruntime140_2.__NLG_Return2     @3
