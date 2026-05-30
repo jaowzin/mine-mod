@@ -187,3 +187,26 @@ powershell -ExecutionPolicy Bypass -File scripts\uninstall_manual.ps1 `
 ## Limites
 
 Este projeto é para o laboratório autorizado do CTF. Não use em Minecraft oficial, Store real, pagamento real, conta Microsoft real ou servidor público.
+
+
+## Interface Windows opcional
+
+Este pacote também inclui `tools/CTFInstallerGui`, uma interface WinForms para instalar/remover o payload sem rodar instaladores de terceiros.
+
+Ela não faz injeção genérica em processo aberto. Ela prepara os arquivos para a build allowlisted do CTF e o patch acontece em memória quando o jogo inicia e carrega o proxy.
+
+Build:
+
+```powershell
+dotnet publish tools\CTFInstallerGui\CTFInstallerGui.csproj -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true
+```
+
+Uso:
+
+1. feche a build CTF;
+2. abra `CTFInstallerGui.exe` como administrador;
+3. clique em `Detectar build`;
+4. selecione a pasta `payload`/build contendo `vcruntime140_1.dll` e `ctf_patch_module.dll`;
+5. clique em `Instalar/atualizar`;
+6. abra a build CTF.
+
