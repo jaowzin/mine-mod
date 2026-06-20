@@ -8,7 +8,9 @@ namespace CTFInstallerGui;
 
 public sealed class MainForm : Form
 {
-    private const string ExpectedPackage = "MICROSOFT.MINECRAFTUWP_1.26.2101.0_x64__8wekyb3d8bbwe";
+    private const string ExpectedPackageName = "Microsoft.MinecraftUWP";
+    private const string ExpectedPackageFamilySuffix = "8wekyb3d8bbwe";
+    private const string ExpectedPackageArchitecture = "x64";
     private const string MarkerDirName = "MinecraftBedrockCTF";
     private const string MarkerFileName = "ALLOW_CTF.txt";
     private const string CtfId = "MINECRAFT-BEDROCK-CUSTOM-BUILD-CTF";
@@ -646,11 +648,17 @@ public sealed class MainForm : Form
 
     private void DetectCtfPackage(bool throwOnFail = true)
     {
-        Log("Detectando pacote CTF allowlisted...");
+        Log("Detectando pacote CTF allowlisted sem fixar versão...");
         string script = @"
-$pkg = Get-AppxPackage | Where-Object {
-  $_.PackageFullName -ieq '" + ExpectedPackage + @"'
-} | Select-Object -First 1 Name, PackageFullName, InstallLocation
+$pattern = '^Microsoft\.MinecraftUWP_[^_]+_x64__8wekyb3d8bbwe$'
+$pkg = Get-AppxPackage -Name Microsoft.MinecraftUWP -ErrorAction SilentlyContinue |
+  Where-Object {
+    $_.PackageFullName -match $pattern -and
+    $_.InstallLocation -and
+    (Test-Path $_.InstallLocation)
+  } |
+  Sort-Object Version -Descending |
+  Select-Object -First 1 Name, PackageFullName, InstallLocation, Version
 if (!$pkg) { exit 2 }
 $pkg | ConvertTo-Json -Compress
 ";
@@ -667,9 +675,11 @@ $pkg | ConvertTo-Json -Compress
         SetPathText(_appFolderBox, doc.RootElement.GetProperty("InstallLocation").GetString() ?? "");
 
         if (!IsAllowedPackage(_packageBox.Text, _appFolderBox.Text))
-            throw new InvalidOperationException("Pacote encontrado não bate com a allowlist do CTF.");
+            throw new InvalidOperationException("Pacote encontrado não bate com a allowlist dinâmica do CTF.");
 
         Log("Build detectada: " + _packageBox.Text);
+        if (doc.RootElement.TryGetProperty("Version", out JsonElement version))
+            Log("Versão detectada: " + version.ToString());
         Log("Pasta da build: " + _appFolderBox.Text);
     }
 
@@ -792,8 +802,11 @@ $pkg | ConvertTo-Json -Compress
 
     private static bool IsAllowedPackage(string packageFullName, string installLocation)
     {
-        return packageFullName.Equals(ExpectedPackage, StringComparison.OrdinalIgnoreCase)
-            && installLocation.Contains("MINECRAFTUWP_1.26.2101.0_x64__8wekyb3d8bbwe", StringComparison.OrdinalIgnoreCase);
+        string suffix = "_" + ExpectedPackageArchitecture + "__" + ExpectedPackageFamilySuffix;
+        return packageFullName.StartsWith(ExpectedPackageName + "_", StringComparison.OrdinalIgnoreCase)
+            && packageFullName.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)
+            && installLocation.Contains(ExpectedPackageName + "_", StringComparison.OrdinalIgnoreCase)
+            && installLocation.Contains(suffix, StringComparison.OrdinalIgnoreCase);
     }
 
     private void EnsureGameClosed()
