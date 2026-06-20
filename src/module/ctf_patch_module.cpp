@@ -128,10 +128,16 @@ static bool LooksLikeAllowedCtfProcess() {
     wchar_t exePath[MAX_PATH * 2]{};
     GetModuleFileNameW(nullptr, exePath, static_cast<DWORD>(std::size(exePath)));
 
-    // Narrow guard for the lab package you showed in PowerShell.
-    // Edit this only if the CTF organizers ship another authorized package/version.
-    return ContainsW(exePath, L"MICROSOFT.MINECRAFTUWP_1.26.2101.0_x64__8wekyb3d8bbwe") ||
-           ContainsW(exePath, L"Microsoft.MinecraftUWP_1.26.2101.0_x64__8wekyb3d8bbwe");
+    // Version-agnostic CTF guard: accept the installed Microsoft.MinecraftUWP x64 package
+    // family, but do not pin the middle version segment. This supports updated CTF builds
+    // such as 21.31 while keeping the check scoped to the expected package family.
+    const bool inWindowsApps = ContainsW(exePath, L"\\WindowsApps\\");
+    const bool packageName = ContainsW(exePath, L"Microsoft.MinecraftUWP_") ||
+                             ContainsW(exePath, L"MICROSOFT.MINECRAFTUWP_");
+    const bool packageArchAndFamily = ContainsW(exePath, L"_x64__8wekyb3d8bbwe\\") ||
+                                      ContainsW(exePath, L"_x64__8wekyb3d8bbwe/");
+
+    return inWindowsApps && packageName && packageArchAndFamily;
 }
 
 static bool MatchMask(const uint8_t* data, const uint8_t* pattern, const char* mask, std::size_t len) {
@@ -177,8 +183,8 @@ static bool ScanReadableImageSections(HMODULE module,
         const IMAGE_SECTION_HEADER& sec = sections[i];
 
         // KG-UP-GOAT does a raw in-image scan. This safer clone scans readable,
-        // non-discardable sections so data strings such as "isTrial" are covered
-        // without walking unrelated process memory.
+        // non-discardable sections so data strings are covered without walking
+        // unrelated process memory.
         const bool readable = (sec.Characteristics & IMAGE_SCN_MEM_READ) != 0;
         const bool discardable = (sec.Characteristics & IMAGE_SCN_MEM_DISCARDABLE) != 0;
         if (!readable || discardable) continue;
@@ -215,6 +221,7 @@ static bool ScanReadableImageSections(HMODULE module,
 
     return true;
 }
+
 static bool ApplyOnePatch(const PatchSpec& spec) {
     if (!spec.name || !spec.pattern || !spec.mask || spec.pattern_len == 0 ||
         !spec.replacement || spec.replacement_len == 0) {
@@ -224,8 +231,7 @@ static bool ApplyOnePatch(const PatchSpec& spec) {
 
     HMODULE module = spec.module_name ? GetModuleHandleW(spec.module_name) : GetModuleHandleW(nullptr);
     if (!module && spec.module_name) {
-        // KG-UP-GOAT explicitly loads xgameruntime.dll if it is not already present.
-        // We keep that behavior local and visible in logs.
+        // Load only the module named by the CTF patch specification and record it in logs.
         module = LoadLibraryW(spec.module_name);
         if (module) {
             WriteLogW(L"Target module was loaded by ctf_patch_module.");
@@ -284,7 +290,7 @@ static DWORD WINAPI PatchThread(LPVOID) {
     }
 
     if (!LooksLikeAllowedCtfProcess()) {
-        WriteLogW(L"Process path does not match allowed CTF package/version. Exiting without patching.");
+        WriteLogW(L"Process path does not match allowed CTF package family/architecture. Exiting without patching.");
         return 0;
     }
 

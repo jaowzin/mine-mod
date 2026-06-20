@@ -101,9 +101,16 @@ static bool LooksLikeAllowedCtfProcess() {
     wchar_t exePath[MAX_PATH * 2]{};
     GetModuleFileNameW(nullptr, exePath, static_cast<DWORD>(std::size(exePath)));
 
-    // Keep this narrow. Edit only for your authorized CTF build.
-    return Contains(exePath, L"MICROSOFT.MINECRAFTUWP_1.26.2101.0_x64__8wekyb3d8bbwe") ||
-           Contains(exePath, L"Microsoft.MinecraftUWP_1.26.2101.0_x64__8wekyb3d8bbwe");
+    // Version-agnostic CTF guard: accept the installed Microsoft.MinecraftUWP x64 package
+    // family, but do not pin the middle version segment. This supports updated CTF builds
+    // such as 21.31 while keeping the check scoped to the expected package family.
+    const bool inWindowsApps = Contains(exePath, L"\\WindowsApps\\");
+    const bool packageName = Contains(exePath, L"Microsoft.MinecraftUWP_") ||
+                             Contains(exePath, L"MICROSOFT.MINECRAFTUWP_");
+    const bool packageArchAndFamily = Contains(exePath, L"_x64__8wekyb3d8bbwe\\") ||
+                                      Contains(exePath, L"_x64__8wekyb3d8bbwe/");
+
+    return inWindowsApps && packageName && packageArchAndFamily;
 }
 
 static bool BuildSameDirectoryPath(const wchar_t* fileName, wchar_t* out, DWORD outCount) {
@@ -143,7 +150,7 @@ static DWORD WINAPI LoaderThread(LPVOID) {
     }
 
     if (!LooksLikeAllowedCtfProcess()) {
-        WriteLog(L"Proxy loaded outside the allowed CTF package/version. Not loading module.");
+        WriteLog(L"Proxy loaded outside the allowed CTF package family/architecture. Not loading module.");
         return 0;
     }
 

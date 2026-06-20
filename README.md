@@ -1,10 +1,28 @@
 # Minecraft Bedrock CTF Clean Module
 
-Projeto C++ mínimo e auditável para o desafio:
+Projeto C++ mínimo e auditável para o desafio autorizado:
 
 - CTF-ID: `MINECRAFT-BEDROCK-CUSTOM-BUILD-CTF`
-- Build esperada: `MICROSOFT.MINECRAFTUWP_1.26.2101.0_x64__8wekyb3d8bbwe`
+- Package family esperada: `Microsoft.MinecraftUWP_8wekyb3d8bbwe`
+- Arquitetura esperada: `x64`
+- Versão: detectada automaticamente a partir do pacote instalado no computador do usuário.
 - Sem rede, sem updater, sem telemetria, sem persistência, sem mexer em conta/loja real.
+
+## O que mudou nesta branch
+
+A instalação e os guards em runtime não dependem mais de uma versão fixa como:
+
+```text
+MICROSOFT.MINECRAFTUWP_1.26.2101.0_x64__8wekyb3d8bbwe
+```
+
+Agora o projeto aceita a versão atualmente instalada desde que o pacote continue pertencendo à família CTF esperada:
+
+```text
+Microsoft.MinecraftUWP_<versao_instalada>_x64__8wekyb3d8bbwe
+```
+
+Isso cobre updates do CTF, como a nova versão 21.31, sem precisar editar manualmente o número da versão em vários arquivos.
 
 ## Componentes
 
@@ -28,15 +46,14 @@ contiver a assinatura do CTF.
 
 ### `ctf_patch_module.dll`
 
-Módulo local do CTF. Ele já inclui o patch clonado do KG-UP-GOAT, mas só aplica quando o marcador do CTF existir e `ENABLE_PATCHES=1` estiver habilitado.
+Módulo local do CTF. Ele só aplica patches quando todos os controles abaixo passam:
 
-Ele só aplica patches se:
-
-1. o marcador do CTF existir;
-2. o processo estiver dentro da package/version allowlisted;
-3. `ENABLE_PATCHES=1` estiver no marcador;
-4. houver assinatura definida em `src/module/user_patches.h`;
-5. cada assinatura bater exatamente uma vez.
+1. o marcador do CTF existe;
+2. o processo está dentro da package family allowlisted;
+3. a arquitetura do pacote é x64;
+4. `ENABLE_PATCHES=1` está no marcador;
+5. existe assinatura definida em `src/module/user_patches.h`;
+6. cada assinatura bate exatamente uma vez.
 
 Logs:
 
@@ -95,22 +112,25 @@ powershell -ExecutionPolicy Bypass -File scripts\set_patches_enabled.ps1 -Enable
 
 ## Instalação manual na build do CTF
 
-Primeiro descubra a pasta:
+Agora não precisa mais informar a pasta versionada do WindowsApps. O script detecta a versão instalada automaticamente:
 
 ```powershell
-$pkg = Get-AppxPackage | Where-Object {
-  $_.Name -like "*Minecraft*" -or $_.PackageFullName -like "*Minecraft*"
-}
-
-$pkg | Select-Object Name, PackageFullName, InstallLocation
+powershell -ExecutionPolicy Bypass -File scripts\install_from_build.ps1 `
+  -BuildDir ".\build"
 ```
 
-Depois, usando a pasta retornada:
+O script procura um pacote instalado que bata com:
+
+```text
+Microsoft.MinecraftUWP_<versao_instalada>_x64__8wekyb3d8bbwe
+```
+
+Se o CTF usar uma instalação alternativa ou você precisar apontar manualmente para uma pasta específica, ainda dá para passar `-AppFolder`, mas a pasta precisa continuar batendo com a família/arquitetura permitida:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\install_from_build.ps1 `
   -BuildDir ".\build" `
-  -AppFolder "C:\Program Files\WindowsApps\MICROSOFT.MINECRAFTUWP_1.26.2101.0_x64__8wekyb3d8bbwe"
+  -AppFolder "C:\Program Files\WindowsApps\Microsoft.MinecraftUWP_<versao_instalada>_x64__8wekyb3d8bbwe"
 ```
 
 O script copia:
@@ -121,6 +141,21 @@ vcruntime140_2.dll      -> pasta da build CTF, vindo do VCLibs UWPDesktop x64 li
 ctf_patch_module.dll    -> %APPDATA%\Minecraft Bedrock\mods
 ```
 
+## Remover
+
+Também não precisa mais informar a versão:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\uninstall_manual.ps1
+```
+
+Fallback manual:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\uninstall_manual.ps1 `
+  -AppFolder "C:\Program Files\WindowsApps\Microsoft.MinecraftUWP_<versao_instalada>_x64__8wekyb3d8bbwe"
+```
+
 ## Como adicionar patches
 
 Edite:
@@ -129,7 +164,7 @@ Edite:
 src/module/user_patches.h
 ```
 
-A estrutura aceita pattern/mask, com `x` para byte exato e `?` para wildcard. Nesta versão, `user_patches.h` já contém o patch `xgameruntime.dll: isTrial\0 -> xzNope\0` identificado no KG.
+A estrutura aceita pattern/mask, com `x` para byte exato e `?` para wildcard. Não deixe patches genéricos. Use assinaturas únicas da build do CTF e valide tudo no ambiente autorizado do evento.
 
 Exemplo dummy, não funcional:
 
@@ -156,91 +191,12 @@ inline const PatchSpec* GetUserPatches(std::size_t& count) {
 }
 ```
 
-Não deixe patches genéricos. Use assinaturas únicas da build do CTF.
-
-
-## Patch clonado do KG-UP-GOAT
-
-Análise estática do `KG-UP-GOAT.dll` mostrou que o patch efetivo é pequeno:
-
-```text
-módulo alvo: xgameruntime.dll
-procura:     isTrial\0
-substitui:   xzNope\0
-```
-
-Esse projeto já vem com essa assinatura em:
-
-```text
-src/module/user_patches.h
-```
-
-O módulo ainda exige o marcador do CTF e `ENABLE_PATCHES=1`; sem isso, ele só registra log e não altera memória.
-
-## Remover
-
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts\uninstall_manual.ps1 `
-  -AppFolder "C:\Program Files\WindowsApps\MICROSOFT.MINECRAFTUWP_1.26.2101.0_x64__8wekyb3d8bbwe"
-```
-
-## Limites
-
-Este projeto é para o laboratório autorizado do CTF. Não use em Minecraft oficial, Store real, pagamento real, conta Microsoft real ou servidor público.
-
-
 ## Interface Windows opcional
 
 Este pacote também inclui `tools/CTFInstallerGui`, uma interface WinForms para instalar/remover o payload sem rodar instaladores de terceiros.
 
-Ela não faz injeção genérica em processo aberto. Ela prepara os arquivos para a build allowlisted do CTF e o patch acontece em memória quando o jogo inicia e carrega o proxy.
+Observação: a GUI ainda pode precisar de uma atualização separada caso você queira que ela acompanhe o mesmo comportamento dinâmico dos scripts. O caminho recomendado para a versão 21.31 nesta branch é usar os scripts PowerShell acima.
 
-Build:
+## Limites
 
-```powershell
-dotnet publish tools\CTFInstallerGui\CTFInstallerGui.csproj -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true
-```
-
-Uso:
-
-1. feche a build CTF;
-2. baixe o artifact do GitHub Actions mantendo `gui/` e `payload/` lado a lado;
-3. abra `gui\CTFInstallerGui.exe` como administrador;
-4. a GUI detecta a build e o payload automaticamente;
-5. clique em `Instalar / atualizar`;
-6. abra a build CTF.
-
-Estrutura esperada do artifact:
-
-```text
-mc_ctf_clean_gui_release/
-├─ gui/
-│  └─ CTFInstallerGui.exe
-└─ payload/
-   ├─ vcruntime140_1.dll
-   └─ ctf_patch_module.dll
-```
-
-
-
-## GUI atualizada
-
-A versão `tools/CTFInstallerGui` agora inclui:
-
-- layout corrigido para não cortar os botões;
-- detecção automática de `release\payload`;
-- ícone próprio embutido em `assets\app.ico`;
-- painel de status mais claro para Build, Payload, Marcador, Instalação e Admin.
-
-O artifact esperado continua:
-
-```text
-release/
-├─ gui/
-│  └─ CTFInstallerGui.exe
-└─ payload/
-   ├─ vcruntime140_1.dll
-   └─ ctf_patch_module.dll
-```
-
-Abra `gui\CTFInstallerGui.exe`; o payload será encontrado automaticamente.
+Este projeto é para laboratório autorizado do CTF. Não use em Minecraft oficial, Store real, pagamento real, conta Microsoft real ou servidor público.
