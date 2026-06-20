@@ -2,24 +2,64 @@ param(
     [Parameter(Mandatory=$true)]
     [string]$BuildDir,
 
-    [Parameter(Mandatory=$true)]
-    [string]$AppFolder,
+    # Optional now: when omitted, the script resolves the installed Minecraft package dynamically.
+    [string]$AppFolder = "",
+
+    [string]$PackageName = "Microsoft.MinecraftUWP",
+    [string]$PackageFamilySuffix = "8wekyb3d8bbwe",
+    [string]$Architecture = "x64",
 
     [string]$ModuleDestination = "$env:APPDATA\Minecraft Bedrock\mods"
 )
 
 $ErrorActionPreference = "Stop"
 
+function Get-AllowedCtfPackage {
+    $escapedName = [regex]::Escape($PackageName)
+    $escapedArch = [regex]::Escape($Architecture)
+    $escapedSuffix = [regex]::Escape($PackageFamilySuffix)
+    $packagePattern = "^$escapedName`_[^_]+_$escapedArch`__$escapedSuffix$"
+
+    $pkgs = Get-AppxPackage -Name $PackageName -ErrorAction SilentlyContinue |
+        Where-Object {
+            $_.PackageFullName -match $packagePattern -and
+            $_.InstallLocation -and
+            (Test-Path $_.InstallLocation)
+        } |
+        Sort-Object Version -Descending
+
+    return $pkgs | Select-Object -First 1
+}
+
+function Test-AllowedCtfAppFolder([string]$Path) {
+    if ([string]::IsNullOrWhiteSpace($Path)) { return $false }
+    if (!(Test-Path $Path)) { return $false }
+
+    $escapedName = [regex]::Escape($PackageName)
+    $escapedArch = [regex]::Escape($Architecture)
+    $escapedSuffix = [regex]::Escape($PackageFamilySuffix)
+    $folderPattern = "(?i)[\\/]$escapedName`_[^\\/]+_$escapedArch`__$escapedSuffix$"
+
+    return $Path -match $folderPattern
+}
+
 if (!(Test-Path $BuildDir)) {
     throw "BuildDir not found: $BuildDir"
 }
-if (!(Test-Path $AppFolder)) {
-    throw "AppFolder not found: $AppFolder"
+
+if ([string]::IsNullOrWhiteSpace($AppFolder)) {
+    $pkg = Get-AllowedCtfPackage
+    if (!$pkg) {
+        throw "Could not find an installed CTF Minecraft package matching $PackageName/*/$Architecture/$PackageFamilySuffix."
+    }
+
+    $AppFolder = $pkg.InstallLocation
+    Write-Host "Detected installed package: $($pkg.PackageFullName)"
+    Write-Host "Detected AppFolder: $AppFolder"
 }
 
-# Narrow guard for the CTF package/version shown in PowerShell.
-if ($AppFolder -notmatch "MINECRAFTUWP_1\.26\.2101\.0_x64__8wekyb3d8bbwe") {
-    throw "Refusing to install: AppFolder does not look like the allowed CTF package/version."
+if (!(Test-AllowedCtfAppFolder $AppFolder)) {
+    throw "Refusing to install: AppFolder does not match the allowed CTF package family/architecture. Path: $AppFolder"
 }
 
 $proxy = Get-ChildItem -Path $BuildDir -Recurse -Filter "vcruntime140_1.dll" | Select-Object -First 1
@@ -39,11 +79,11 @@ function Backup-IfExists($Path) {
 
 # Copy the clean UWPDesktop x64 runtime as vcruntime140_2.dll.
 $uwpDll = Get-ChildItem "C:\Program Files\WindowsApps" -Recurse -Filter "vcruntime140_1.dll" -ErrorAction SilentlyContinue |
-  Where-Object { $_.FullName -like "*uwpdesktop*" -and $_.FullName -like "*x64*" } |
+  Where-Object { $_.FullName -like "*uwpdesktop*" -and $_.FullName -like "*$Architecture*" } |
   Select-Object -First 1
 
 if (!$uwpDll) {
-    throw "Could not locate the clean UWPDesktop x64 vcruntime140_1.dll."
+    throw "Could not locate the clean UWPDesktop $Architecture vcruntime140_1.dll."
 }
 
 $dstProxy = Join-Path $AppFolder "vcruntime140_1.dll"
